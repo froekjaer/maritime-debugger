@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Maritime Debugger</title>
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Maritime Debugger</h1>
+        <p>NMEA 0183 og NMEA 2000/CAN live analyse</p>
+      </div>
+      <div class="status" id="serialStatus">Offline</div>
+    </header>
+
+    <main class="layout">
+      <section class="controls">
+        <div class="panel">
+          <div class="panelHeader">
+            <h2>Seriel input</h2>
+            <button id="refreshPorts" title="Opdater porte">↻</button>
+          </div>
+          <label>
+            Port
+            <select id="portSelect"></select>
+          </label>
+          <label>
+            Baud
+            <input id="baudInput" type="number" min="1200" step="1" value="115200">
+          </label>
+          <div class="buttonRow">
+            <button id="startSerial">Start</button>
+            <button id="stopSerial" class="secondary">Stop</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Replay</h2>
+          <textarea id="replayText" spellcheck="false" placeholder="$GPRMC,120000,A,5540.000,N,01234.000,E,5.5,180.0,260526,,,A*7F&#10;T09F8010A8FFD3012C0000FFFF"></textarea>
+          <div class="buttonRow">
+            <button id="runReplay">Kør replay</button>
+            <button id="clearLog" class="secondary">Ryd</button>
+          </div>
+        </div>
+
+        <div class="panel stats" id="stats"></div>
+      </section>
+
+      <section class="messages">
+        <div class="toolbar">
+          <input id="filterInput" type="search" placeholder="Filtrer på PGN, sentence, source, raw...">
+          <select id="protocolFilter">
+            <option value="">Alle</option>
+            <option value="nmea0183">NMEA 0183</option>
+            <option value="nmea2000-can">NMEA 2000</option>
+            <option value="nmea2000-pcdin">PCDIN</option>
+            <option value="nmea2000-debug">N2K Debug</option>
+            <option value="can">CAN</option>
+            <option value="raw">Raw</option>
+          </select>
+          <button id="pauseLog" class="secondary">Pause</button>
+          <button id="exportJson" class="secondary">Export JSON</button>
+        </div>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Tid</th>
+                <th>Protokol</th>
+                <th>Summary</th>
+                <th>Decoded</th>
+                <th>Raw</th>
+              </tr>
+            </thead>
+            <tbody id="messageRows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

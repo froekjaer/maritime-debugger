@@ -1,0 +1,22 @@
+# Transcribed from Vela-Navega forum screenshot:
+# https://vela-navega.com/forum/viewtopic.php?f=25&t=457
+#
+# The official source is an image, not a downloadable text dump, so these lines
+# are a small hand-transcribed sample for parser testing.
+N2K: PGN:128259 SRC:25 = [191F503] (Speed, Water referenced)
+N2K>XXX:$VWVHW,,,,,M,5.0,N,9.3,K*5B
+N2K: PGN:128267 SRC:25 = [191F50B] (Water Depth)
+N2K>XXX:$IIDPT,48.0,0.0*7C
+N2K>XXX:$IIDBK,157.5,f,48.0,M,26.2,F*02
+N2K: PGN:128267 SRC:27 = [1B1F50B] (Water Depth)
+N2K>XXX:$IIDPT,18.0,0.0*79
+N2K>XXX:$IIDBK,59.1,f,18.0,M,9.8,F*0B
+N2K: PGN:129029 SRC:26 = [1A1F805] Stored GNSS Position Data
+N2K: PGN:130312 SRC:22 = [161FD08] Temperature
+N2K: PGN:130310 SRC:22 = [161FD06] Environmental Parameters
+N2K: PGN:130306 SRC:24 = [181FD02] Wind Data
+N2K>XXX:$IIMWV,154.0,R,11.3,M,A*0D
+N2K: PGN:128259 SRC:25 = [191F503] (Speed, Water referenced)
+N2K>XXX:$VWVHW,,,,,M,4.7,N,8.7,K*58
+N2K: PGN:128267 SRC:25 = [191F50B] (Water Depth)
+N2K>XXX:$IIDPT,49.0,0.0*7D
