@@ -30,6 +30,13 @@
             Baud
             <input id="baudInput" type="number" min="1200" step="1" value="115200">
           </label>
+          <label>
+            Adapter
+            <select id="adapterSelect">
+              <option value="plain">Plain serial / already configured</option>
+              <option value="canable-slcan">CANable SLCAN, N2K 250 kbit/s</option>
+            </select>
+          </label>
           <div class="buttonRow">
             <button id="startSerial">Start</button>
             <button id="stopSerial" class="secondary">Stop</button>

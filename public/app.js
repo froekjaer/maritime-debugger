@@ -3,6 +3,7 @@ const stats = document.querySelector("#stats");
 const serialStatus = document.querySelector("#serialStatus");
 const portSelect = document.querySelector("#portSelect");
 const baudInput = document.querySelector("#baudInput");
+const adapterSelect = document.querySelector("#adapterSelect");
 const filterInput = document.querySelector("#filterInput");
 const protocolFilter = document.querySelector("#protocolFilter");
 const replayText = document.querySelector("#replayText");
@@ -64,7 +65,8 @@ async function startSerial() {
     method: "POST",
     body: JSON.stringify({
       device: portSelect.value,
-      baud: Number(baudInput.value || 115200)
+      baud: Number(baudInput.value || 115200),
+      adapter: adapterSelect.value
     })
   });
 }

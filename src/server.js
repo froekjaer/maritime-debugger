@@ -12,7 +12,6 @@ const port = Number(process.env.PORT || 8787);
 const clients = new Set();
 const state = {
   serial: null,
-  serialProcess: null,
   serialStream: null,
   buffer: "",
   counters: {
@@ -59,15 +58,19 @@ async function handleSerialStart(req, res) {
   const body = await readJson(req);
   const device = String(body.device || "");
   const baud = Number(body.baud || 115200);
+  const adapter = String(body.adapter || "plain");
   if (!device.startsWith("/dev/")) {
     return sendJson(res, { error: "Only /dev serial devices are supported in this no-dependency MVP." }, 400);
   }
 
   stopSerial();
-  configureSerial(device, baud);
+  await configureSerial(device, baud);
+  if (adapter === "canable-slcan") {
+    await initializeCanable(device);
+  }
 
   state.serialStream = fs.createReadStream(device, { encoding: "utf8" });
-  state.serial = { device, baud, startedAt: new Date().toISOString() };
+  state.serial = { device, baud, adapter, startedAt: new Date().toISOString() };
   state.buffer = "";
   state.serialStream.on("data", (chunk) => readChunk(chunk, "serial"));
   state.serialStream.on("error", (error) => broadcast("error", { message: error.message }));
@@ -136,19 +139,53 @@ function ingestLine(line, source) {
 
 function stopSerial() {
   if (state.serialStream) state.serialStream.destroy();
-  if (state.serialProcess) state.serialProcess.kill();
   state.serial = null;
   state.serialStream = null;
-  state.serialProcess = null;
   state.buffer = "";
 }
 
-function configureSerial(device, baud) {
+async function configureSerial(device, baud) {
+  const args = os.platform() === "darwin"
+    ? ["-f", device, String(baud), "raw", "-echo"]
+    : ["-F", device, String(baud), "raw", "-echo"];
+
   if (os.platform() === "darwin") {
-    spawn("stty", ["-f", device, String(baud), "raw", "-echo"]);
+    await run("stty", args);
   } else if (os.platform() === "linux") {
-    spawn("stty", ["-F", device, String(baud), "raw", "-echo"]);
+    await run("stty", args);
   }
+}
+
+async function initializeCanable(device) {
+  const file = await fs.promises.open(device, "w");
+  try {
+    await file.write("C\r");
+    await sleep(50);
+    await file.write("S5\r");
+    await sleep(50);
+    await file.write("O\r");
+    await sleep(50);
+  } finally {
+    await file.close();
+  }
+}
+
+function run(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args);
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      code === 0 ? resolve() : reject(new Error(stderr || `${command} exited with ${code}`));
+    });
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function listPorts() {
