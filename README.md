@@ -14,7 +14,14 @@ Open <http://localhost:8787>.
 
 - NMEA 0183 text: `$..*hh` and `!..*hh` sentences from serial or replay text.
 - CAN-over-serial SLCAN: `t...` and `T...` frames from serial or replay text.
+- NMEA 2000 `$PCDIN` text frames.
+- Linux `candump` style lines.
+- Vela-Navega N2K0183 debug and port conversion lines.
 - Raw text replay: paste a captured log into the UI.
+
+## Parser Fixtures
+
+Small paste-ready examples live in `samples/parser-fixtures.txt`. They include PGN 127505 Fluid Level examples for fuel and water tanks.
 
 ## Serial Notes
 

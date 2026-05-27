@@ -60,6 +60,15 @@ const PGN_NAMES = {
   130316: "Temperature, Extended Range"
 };
 
+const FLUID_TYPES = {
+  0: "Fuel",
+  1: "Water",
+  2: "Gray water",
+  3: "Live well",
+  4: "Oil",
+  5: "Black water"
+};
+
 export function parseLine(line) {
   const value = line.trim();
   if (!value) return null;
@@ -325,7 +334,7 @@ function decodeKnownPgn(pgn, data) {
     const value = u16(offset);
     return value & 0x8000 ? value - 0x10000 : value;
   };
-  const u32 = (offset) => bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24);
+  const u32 = (offset) => (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
   const i32 = (offset) => {
     const value = u32(offset) >>> 0;
     return value & 0x80000000 ? value - 0x100000000 : value;
@@ -341,6 +350,18 @@ function decodeKnownPgn(pgn, data) {
         variationDeg: nullableAngle(i16(5)),
         reference: ["True", "Magnetic", "Error", "Null"][bytes[7] & 0x3] || "Unknown"
       };
+    case 127505: {
+      const levelRaw = u16(1);
+      const capacityRaw = u32(3);
+      const fluidTypeId = (bytes[0] >> 4) & 0xf;
+      return {
+        instance: bytes[0] & 0xf,
+        fluidTypeId,
+        fluidType: FLUID_TYPES[fluidTypeId] || "Unknown",
+        levelPercent: levelRaw === 0xffff ? null : round(levelRaw * 0.004, 3),
+        capacityLiters: capacityRaw === 0xffffffff ? null : round(capacityRaw * 0.1, 1)
+      };
+    }
     case 128267:
       return {
         sid: bytes[0],

@@ -1,0 +1,10 @@
+# Parser fixtures for quick manual replay checks.
+#
+# PGN 127505 Fluid Level, source 64, tank instance 1, Fuel, 50%, 120 liters.
+T09F21140801D430B0040000FF
+
+# Same PGN 127505 payload as PCDIN. Checksum is valid.
+$PCDIN,01F211,00000000,40,01D430B0040000FF*25
+
+# PGN 127505 Fluid Level, source 64, tank instance 2, Water, level/capacity not available.
+T09F21140812FFFFFFFFFFFFFF
