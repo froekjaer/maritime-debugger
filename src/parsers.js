@@ -7,7 +7,10 @@ const NMEA0183_FIELDS = {
   VHW: ["headingTrue", "trueIndicator", "headingMagnetic", "magneticIndicator", "speedKnots", "knotsUnit", "speedKmh", "kmhUnit"],
   DBT: ["depthFeet", "feetUnit", "depthMeters", "metersUnit", "depthFathoms", "fathomsUnit"],
   DPT: ["depthMeters", "offsetMeters", "maxRangeMeters"],
+  GSA: ["mode", "fixType", "satellite1", "satellite2", "satellite3", "satellite4", "satellite5", "satellite6", "satellite7", "satellite8", "satellite9", "satellite10", "satellite11", "satellite12", "pdop", "hdop", "vdop", "systemId"],
+  GSV: ["messageCount", "messageNumber", "satellitesInView", "satellite1Id", "satellite1Elevation", "satellite1Azimuth", "satellite1Snr", "satellite2Id", "satellite2Elevation", "satellite2Azimuth", "satellite2Snr", "satellite3Id", "satellite3Elevation", "satellite3Azimuth", "satellite3Snr", "satellite4Id", "satellite4Elevation", "satellite4Azimuth", "satellite4Snr", "signalId"],
   MTW: ["waterTemperature", "celsiusUnit"],
+  VTG: ["courseTrue", "trueIndicator", "courseMagnetic", "magneticIndicator", "speedKnots", "knotsUnit", "speedKmh", "kmhUnit", "mode"],
   VDM: ["fragmentCount", "fragmentNumber", "messageId", "radioChannel", "payload", "fillBits"],
   VDO: ["fragmentCount", "fragmentNumber", "messageId", "radioChannel", "payload", "fillBits"]
 };
@@ -62,6 +65,8 @@ export function parseLine(line) {
   if (!value) return null;
   if (/^N2K>[^:]+:\s*[$!]/.test(value)) return parseVelaTranslatedNmea0183(value);
   if (/^N2K:\s*PGN:/i.test(value)) return parseVelaN2kDebug(value);
+  if (/^P#\d+:\s*[$!]/.test(value)) return parsePortNmea0183(value);
+  if (/(?:P\d+>N2K:\s*)?PGN:\s*\d+\[[0-9A-Fa-f]+\]/.test(value)) return parsePortN2kConversion(value);
   if (/^\$PCDIN,/.test(value)) return parsePcdin(value);
   if (value.startsWith("$") || value.startsWith("!")) return parseNmea0183(value);
   if (/^[tT][0-9A-Fa-f]/.test(value)) return parseSlcan(value);
@@ -199,6 +204,54 @@ export function parseVelaN2kDebug(raw) {
       fields: {
         description,
         note: match.groups.note || ""
+      }
+    }
+  };
+}
+
+export function parsePortNmea0183(raw) {
+  const match = raw.match(/^P#(?<port>\d+):\s*(?<sentence>[$!].*)$/);
+  const parsed = parseNmea0183(match?.groups?.sentence || raw);
+  return {
+    ...parsed,
+    raw,
+    inputPort: match?.groups?.port ? Number(match.groups.port) : null,
+    summary: `P#${match?.groups?.port || "?"} ${parsed.summary}`
+  };
+}
+
+export function parsePortN2kConversion(raw) {
+  const normalized = raw.replace(/[\u2000-\u200B\u202F\u205F\u3000]/g, " ");
+  const match = normalized.match(/^\s*(?:(?<port>P\d+)>N2K:\s*)?PGN:\s*(?<pgn>\d+)\[(?<pgnHex>[0-9A-Fa-f]+)\]\s*(?:\((?<description>[^)]*)\))?/);
+  if (!match?.groups) {
+    return {
+      protocol: "nmea2000-conversion",
+      level: "warn",
+      summary: "Invalid port-to-N2K conversion line",
+      raw
+    };
+  }
+
+  const pgn = Number(match.groups.pgn);
+  const description = (match.groups.description || "").trim();
+  return {
+    protocol: "nmea2000-conversion",
+    level: "ok",
+    summary: `${match.groups.port ? `${match.groups.port}>N2K ` : ""}${pgn} ${description || PGN_NAMES[pgn] || "Unknown PGN"}`,
+    raw,
+    conversion: {
+      port: match.groups.port || null,
+      direction: match.groups.port ? "port-to-nmea2000" : "continued-port-to-nmea2000"
+    },
+    nmea2000: {
+      pgn,
+      name: PGN_NAMES[pgn] || description || "Unknown PGN",
+      source: null,
+      destination: null,
+      pgnHex: match.groups.pgnHex,
+      fastPacket: FAST_PACKET_PGNS.has(pgn),
+      fields: {
+        description
       }
     }
   };

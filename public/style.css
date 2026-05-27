@@ -276,6 +276,7 @@ tr.warn td {
 .badge.nmea2000-can { background: #eaf0ff; color: var(--blue); }
 .badge.nmea2000-pcdin { background: #eaf0ff; color: var(--blue); }
 .badge.nmea2000-debug { background: #eaf0ff; color: var(--blue); }
+.badge.nmea2000-conversion { background: #eaf0ff; color: var(--blue); }
 .badge.can { background: #fff1d6; color: var(--amber); }
 .badge.raw { background: #f0f0f0; color: #555; }
 

@@ -150,6 +150,7 @@ function labelProtocol(protocol) {
     "nmea2000-can": "NMEA 2000",
     "nmea2000-pcdin": "PCDIN",
     "nmea2000-debug": "N2K Debug",
+    "nmea2000-conversion": "N2K Conv",
     can: "CAN",
     raw: "Raw"
   }[protocol] || protocol;
