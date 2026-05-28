@@ -86,6 +86,39 @@
           </div>
         </div>
 
+        <div class="panel">
+          <h2>JSON import</h2>
+          <input id="jsonImportInput" type="file" accept="application/json,.json">
+          <div class="buttonRow">
+            <button id="importJson">Import JSON</button>
+          </div>
+          <p class="inputState" id="jsonImportStatus">Ingen fil valgt</p>
+        </div>
+
+        <div class="panel">
+          <h2>Input filter</h2>
+          <label class="checkRow">
+            <input id="filterEnabled" type="checkbox">
+            Aktiv
+          </label>
+          <label>
+            Mode
+            <select id="filterMode">
+              <option value="drop">Drop matches</option>
+              <option value="allow">Allow only matches</option>
+            </select>
+          </label>
+          <label>
+            Patterns
+            <textarea id="filterPatterns" class="compactTextarea" spellcheck="false" placeholder="127488&#10;GSV&#10;nmea2000-debug"></textarea>
+          </label>
+          <div class="buttonRow">
+            <button id="applyInputFilter">Apply</button>
+            <button id="clearInputFilter" class="secondary">Clear</button>
+          </div>
+          <p class="inputState" id="filterStatus">Filter off</p>
+        </div>
+
         <div class="panel stats" id="stats"></div>
       </section>
 

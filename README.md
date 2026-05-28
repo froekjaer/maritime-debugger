@@ -25,6 +25,17 @@ Open <http://localhost:8787>.
 
 Small paste-ready examples live in `samples/parser-fixtures.txt`. They include PGN 127505 Fluid Level examples for fuel and water tanks.
 
+## JSON Import
+
+Use the JSON import control to load files previously exported from the app. The importer accepts either a top-level array of messages or an object with a `messages` or `events` array.
+
+## Input Filter
+
+The input filter runs before incoming live/replay lines are added to the table. Use one pattern per line or comma-separated patterns. Patterns can match PGNs such as `127488`, NMEA 0183 sentence IDs such as `GSV`, protocols such as `nmea2000-debug`, source text, summaries, or raw text.
+
+- `Drop matches`: matching incoming messages are discarded.
+- `Allow only matches`: only matching incoming messages are kept.
+
 ## Serial Notes
 
 The current no-dependency MVP configures serial ports through `stty` on macOS/Linux and then reads the device as a stream.

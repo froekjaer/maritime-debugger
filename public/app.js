@@ -10,6 +10,12 @@ const tcpStatus = document.querySelector("#tcpStatus");
 const udpHostInput = document.querySelector("#udpHostInput");
 const udpPortInput = document.querySelector("#udpPortInput");
 const udpStatus = document.querySelector("#udpStatus");
+const jsonImportInput = document.querySelector("#jsonImportInput");
+const jsonImportStatus = document.querySelector("#jsonImportStatus");
+const filterEnabled = document.querySelector("#filterEnabled");
+const filterMode = document.querySelector("#filterMode");
+const filterPatterns = document.querySelector("#filterPatterns");
+const filterStatus = document.querySelector("#filterStatus");
 const filterInput = document.querySelector("#filterInput");
 const protocolFilter = document.querySelector("#protocolFilter");
 const replayText = document.querySelector("#replayText");
@@ -24,6 +30,13 @@ document.querySelector("#stopTcp").addEventListener("click", stopTcp);
 document.querySelector("#startUdp").addEventListener("click", startUdp);
 document.querySelector("#stopUdp").addEventListener("click", stopUdp);
 document.querySelector("#runReplay").addEventListener("click", runReplay);
+document.querySelector("#importJson").addEventListener("click", () => {
+  importJson().catch((error) => {
+    jsonImportStatus.textContent = `Import failed: ${error.message}`;
+  });
+});
+document.querySelector("#applyInputFilter").addEventListener("click", applyInputFilter);
+document.querySelector("#clearInputFilter").addEventListener("click", clearInputFilter);
 document.querySelector("#clearLog").addEventListener("click", () => {
   messages.length = 0;
   renderRows();
@@ -121,6 +134,51 @@ async function runReplay() {
   });
 }
 
+async function importJson() {
+  const file = jsonImportInput.files?.[0];
+  if (!file) {
+    jsonImportStatus.textContent = "Choose a JSON file";
+    return;
+  }
+
+  const text = await file.text();
+  const parsed = JSON.parse(text);
+  const imported = Array.isArray(parsed) ? parsed : parsed.messages || parsed.events || [];
+  if (!Array.isArray(imported)) throw new Error("JSON must be an array or contain a messages/events array.");
+
+  for (const item of imported) {
+    if (!item || typeof item !== "object") continue;
+    messages.unshift({
+      id: item.id || crypto.randomUUID(),
+      timestamp: item.timestamp || new Date().toISOString(),
+      source: item.source || "json-import",
+      level: item.level || "ok",
+      ...item
+    });
+  }
+  if (messages.length > 5000) messages.length = 5000;
+  renderRows();
+  jsonImportStatus.textContent = `Imported ${imported.length} messages`;
+}
+
+async function applyInputFilter() {
+  await fetchJson("/api/filter", {
+    method: "POST",
+    body: JSON.stringify({
+      enabled: filterEnabled.checked,
+      mode: filterMode.value,
+      patterns: filterPatterns.value
+    })
+  });
+}
+
+async function clearInputFilter() {
+  filterEnabled.checked = false;
+  filterMode.value = "drop";
+  filterPatterns.value = "";
+  await applyInputFilter();
+}
+
 function renderState(state) {
   const activeInputs = [
     state.serial ? "Serial" : null,
@@ -135,6 +193,16 @@ function renderState(state) {
   udpStatus.textContent = state.udp
     ? `UDP ${state.udp.status}: ${state.udp.host}:${state.udp.port}`
     : "UDP offline";
+  if (state.inputFilter) {
+    if (!document.activeElement || ![filterEnabled, filterMode, filterPatterns].includes(document.activeElement)) {
+      filterEnabled.checked = state.inputFilter.enabled;
+      filterMode.value = state.inputFilter.mode;
+      filterPatterns.value = state.inputFilter.patterns.join("\n");
+    }
+    filterStatus.textContent = state.inputFilter.enabled
+      ? `${state.inputFilter.mode === "allow" ? "Allow only" : "Drop"}: ${state.inputFilter.patterns.join(", ")}`
+      : "Filter off";
+  }
 
   const counters = state.counters || {};
   stats.innerHTML = [
@@ -143,6 +211,7 @@ function renderState(state) {
     ["NMEA 2000", counters.nmea2000 || 0],
     ["CAN", counters.can || 0],
     ["Raw", counters.raw || 0],
+    ["Filtered", counters.filtered || 0],
     ["Warnings", counters.warnings || 0]
   ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
 }

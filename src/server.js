@@ -24,12 +24,18 @@ const state = {
     tcp: "",
     udp: ""
   },
+  inputFilter: {
+    enabled: false,
+    mode: "drop",
+    patterns: []
+  },
   counters: {
     total: 0,
     nmea0183: 0,
     nmea2000: 0,
     can: 0,
     raw: 0,
+    filtered: 0,
     warnings: 0
   }
 };
@@ -46,6 +52,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/tcp/stop" && req.method === "POST") return handleTcpStop(res);
     if (url.pathname === "/api/udp/start" && req.method === "POST") return handleUdpStart(req, res);
     if (url.pathname === "/api/udp/stop" && req.method === "POST") return handleUdpStop(res);
+    if (url.pathname === "/api/filter" && req.method === "POST") return handleFilterUpdate(req, res);
     if (url.pathname === "/api/replay" && req.method === "POST") return handleReplay(req, res);
     return serveStatic(url.pathname, res);
   } catch (error) {
@@ -199,6 +206,13 @@ function handleUdpStop(res) {
   sendJson(res, publicState());
 }
 
+async function handleFilterUpdate(req, res) {
+  const body = await readJson(req);
+  state.inputFilter = normalizeFilter(body);
+  broadcast("state", publicState());
+  sendJson(res, publicState());
+}
+
 async function handleReplay(req, res) {
   const body = await readJson(req);
   const text = String(body.text || "");
@@ -244,6 +258,12 @@ function ingestLine(line, source) {
     source,
     ...parsed
   };
+
+  if (isFiltered(event)) {
+    state.counters.filtered += 1;
+    broadcast("state", publicState());
+    return;
+  }
 
   state.counters.total += 1;
   if (event.protocol === "nmea0183") state.counters.nmea0183 += 1;
@@ -360,8 +380,45 @@ function publicState() {
     serial: state.serial,
     tcp: state.tcp,
     udp: state.udp,
+    inputFilter: state.inputFilter,
     counters: state.counters
   };
+}
+
+function normalizeFilter(input) {
+  const enabled = Boolean(input.enabled);
+  const mode = input.mode === "allow" ? "allow" : "drop";
+  const patterns = String(input.patterns || "")
+    .split(/\r?\n|,/)
+    .map((pattern) => pattern.trim())
+    .filter(Boolean)
+    .slice(0, 200);
+  return { enabled, mode, patterns };
+}
+
+function isFiltered(event) {
+  const filter = state.inputFilter;
+  if (!filter.enabled || !filter.patterns.length) return false;
+  const matched = filter.patterns.some((pattern) => eventMatchesPattern(event, pattern));
+  return filter.mode === "allow" ? !matched : matched;
+}
+
+function eventMatchesPattern(event, pattern) {
+  const normalizedPattern = pattern.toLowerCase();
+  if (event.protocol?.toLowerCase() === normalizedPattern) return true;
+  if (event.nmea2000?.pgn !== undefined && String(event.nmea2000.pgn) === pattern) return true;
+  if (event.sentence?.toLowerCase() === normalizedPattern) return true;
+  if (event.talker?.toLowerCase() === normalizedPattern) return true;
+  if (event.source?.toLowerCase().includes(normalizedPattern)) return true;
+  return JSON.stringify({
+    raw: event.raw,
+    summary: event.summary,
+    protocol: event.protocol,
+    source: event.source,
+    nmea2000: event.nmea2000,
+    sentence: event.sentence,
+    talker: event.talker
+  }).toLowerCase().includes(normalizedPattern);
 }
 
 async function readJson(req) {

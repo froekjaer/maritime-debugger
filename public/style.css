@@ -145,12 +145,26 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(31, 111, 235, .14);
 }
 
+input[type="checkbox"] {
+  width: auto;
+}
+
 textarea {
   min-height: 150px;
   margin-top: 12px;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
+}
+
+.compactTextarea {
+  min-height: 86px;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 button {
