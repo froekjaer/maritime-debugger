@@ -53,6 +53,14 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+server.on("error", (error) => {
+  if (error.code === "EADDRINUSE") {
+    console.log(`Maritime Debugger is already running on http://localhost:${port}`);
+    process.exit(0);
+  }
+  throw error;
+});
+
 server.listen(port, () => {
   console.log(`Maritime Debugger running on http://localhost:${port}`);
 });
