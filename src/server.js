@@ -1,5 +1,7 @@
 import fs from "node:fs";
+import dgram from "node:dgram";
 import http from "node:http";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -13,7 +15,15 @@ const clients = new Set();
 const state = {
   serial: null,
   serialStream: null,
-  buffer: "",
+  tcp: null,
+  tcpSocket: null,
+  udp: null,
+  udpSocket: null,
+  buffers: {
+    serial: "",
+    tcp: "",
+    udp: ""
+  },
   counters: {
     total: 0,
     nmea0183: 0,
@@ -32,6 +42,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/api/state") return sendJson(res, publicState());
     if (url.pathname === "/api/serial/start" && req.method === "POST") return handleSerialStart(req, res);
     if (url.pathname === "/api/serial/stop" && req.method === "POST") return handleSerialStop(res);
+    if (url.pathname === "/api/tcp/start" && req.method === "POST") return handleTcpStart(req, res);
+    if (url.pathname === "/api/tcp/stop" && req.method === "POST") return handleTcpStop(res);
+    if (url.pathname === "/api/udp/start" && req.method === "POST") return handleUdpStart(req, res);
+    if (url.pathname === "/api/udp/stop" && req.method === "POST") return handleUdpStop(res);
     if (url.pathname === "/api/replay" && req.method === "POST") return handleReplay(req, res);
     return serveStatic(url.pathname, res);
   } catch (error) {
@@ -71,7 +85,7 @@ async function handleSerialStart(req, res) {
 
   state.serialStream = fs.createReadStream(device, { encoding: "utf8" });
   state.serial = { device, baud, adapter, startedAt: new Date().toISOString() };
-  state.buffer = "";
+  state.buffers.serial = "";
   state.serialStream.on("data", (chunk) => readChunk(chunk, "serial"));
   state.serialStream.on("error", (error) => broadcast("error", { message: error.message }));
   state.serialStream.on("close", () => {
@@ -85,6 +99,94 @@ async function handleSerialStart(req, res) {
 
 function handleSerialStop(res) {
   stopSerial();
+  broadcast("state", publicState());
+  sendJson(res, publicState());
+}
+
+async function handleTcpStart(req, res) {
+  const body = await readJson(req);
+  const host = String(body.host || "").trim();
+  const port = Number(body.port || 0);
+  if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return sendJson(res, { error: "TCP host and port are required." }, 400);
+  }
+
+  stopTcp();
+  state.buffers.tcp = "";
+  const socket = net.createConnection({ host, port });
+  socket.setEncoding("utf8");
+  state.tcpSocket = socket;
+  state.tcp = { host, port, status: "connecting", startedAt: new Date().toISOString() };
+  socket.on("connect", () => {
+    state.tcp = { ...state.tcp, status: "connected", localPort: socket.localPort };
+    broadcast("state", publicState());
+  });
+  socket.on("data", (chunk) => readChunk(chunk, "tcp"));
+  socket.on("error", (error) => {
+    broadcast("error", { source: "tcp", message: error.message });
+    state.tcp = { ...state.tcp, status: "error", error: error.message };
+    broadcast("state", publicState());
+  });
+  socket.on("close", () => {
+    state.tcp = null;
+    state.tcpSocket = null;
+    state.buffers.tcp = "";
+    broadcast("state", publicState());
+  });
+
+  broadcast("state", publicState());
+  sendJson(res, publicState());
+}
+
+function handleTcpStop(res) {
+  stopTcp();
+  broadcast("state", publicState());
+  sendJson(res, publicState());
+}
+
+async function handleUdpStart(req, res) {
+  const body = await readJson(req);
+  const port = Number(body.port || 0);
+  const host = String(body.host || "0.0.0.0").trim() || "0.0.0.0";
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return sendJson(res, { error: "UDP listen port is required." }, 400);
+  }
+
+  stopUdp();
+  state.buffers.udp = "";
+  const socket = dgram.createSocket("udp4");
+  state.udpSocket = socket;
+  state.udp = { host, port, status: "binding", startedAt: new Date().toISOString() };
+  socket.on("message", (message, remote) => {
+    const source = `udp ${remote.address}:${remote.port}`;
+    readDatagram(message.toString("utf8"), source);
+  });
+  socket.on("error", (error) => {
+    broadcast("error", { source: "udp", message: error.message });
+    state.udp = { ...state.udp, status: "error", error: error.message };
+    broadcast("state", publicState());
+  });
+  socket.on("close", () => {
+    state.udp = null;
+    state.udpSocket = null;
+    state.buffers.udp = "";
+    broadcast("state", publicState());
+  });
+
+  await new Promise((resolve, reject) => {
+    socket.once("listening", resolve);
+    socket.once("error", reject);
+    socket.bind(port, host);
+  });
+
+  const address = socket.address();
+  state.udp = { ...state.udp, status: "listening", host: address.address, port: address.port };
+  broadcast("state", publicState());
+  sendJson(res, publicState());
+}
+
+function handleUdpStop(res) {
+  stopUdp();
   broadcast("state", publicState());
   sendJson(res, publicState());
 }
@@ -109,11 +211,20 @@ async function handleReplay(req, res) {
   sendJson(res, { accepted: lines.length });
 }
 
-function readChunk(chunk, source) {
-  state.buffer += chunk;
-  const lines = state.buffer.split(/\r?\n/);
-  state.buffer = lines.pop() || "";
+function readChunk(chunk, source, bufferKey = source) {
+  if (!Object.hasOwn(state.buffers, bufferKey)) state.buffers[bufferKey] = "";
+  state.buffers[bufferKey] += chunk;
+  const lines = state.buffers[bufferKey].split(/\r?\n/);
+  state.buffers[bufferKey] = lines.pop() || "";
   for (const line of lines) ingestLine(line, source);
+}
+
+function readDatagram(message, source) {
+  if (/\r|\n/.test(message)) {
+    readChunk(message, source, "udp");
+    return;
+  }
+  ingestLine(message, source);
 }
 
 function ingestLine(line, source) {
@@ -141,7 +252,21 @@ function stopSerial() {
   if (state.serialStream) state.serialStream.destroy();
   state.serial = null;
   state.serialStream = null;
-  state.buffer = "";
+  state.buffers.serial = "";
+}
+
+function stopTcp() {
+  if (state.tcpSocket) state.tcpSocket.destroy();
+  state.tcp = null;
+  state.tcpSocket = null;
+  state.buffers.tcp = "";
+}
+
+function stopUdp() {
+  if (state.udpSocket) state.udpSocket.close();
+  state.udp = null;
+  state.udpSocket = null;
+  state.buffers.udp = "";
 }
 
 async function configureSerial(device, baud) {
@@ -225,6 +350,8 @@ function broadcast(event, data) {
 function publicState() {
   return {
     serial: state.serial,
+    tcp: state.tcp,
+    udp: state.udp,
     counters: state.counters
   };
 }

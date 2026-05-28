@@ -12,7 +12,7 @@
         <h1>Maritime Debugger</h1>
         <p>NMEA 0183 og NMEA 2000/CAN live analyse</p>
       </div>
-      <div class="status" id="serialStatus">Offline</div>
+      <div class="status" id="inputStatus">Offline</div>
     </header>
 
     <main class="layout">
@@ -41,6 +41,40 @@
             <button id="startSerial">Start</button>
             <button id="stopSerial" class="secondary">Stop</button>
           </div>
+        </div>
+
+        <div class="panel">
+          <h2>TCP input</h2>
+          <label>
+            Host
+            <input id="tcpHostInput" type="text" value="127.0.0.1" autocomplete="off">
+          </label>
+          <label>
+            Port
+            <input id="tcpPortInput" type="number" min="1" max="65535" value="10110">
+          </label>
+          <div class="buttonRow">
+            <button id="startTcp">Start</button>
+            <button id="stopTcp" class="secondary">Stop</button>
+          </div>
+          <p class="inputState" id="tcpStatus">TCP offline</p>
+        </div>
+
+        <div class="panel">
+          <h2>UDP input</h2>
+          <label>
+            Bind address
+            <input id="udpHostInput" type="text" value="0.0.0.0" autocomplete="off">
+          </label>
+          <label>
+            Port
+            <input id="udpPortInput" type="number" min="1" max="65535" value="10110">
+          </label>
+          <div class="buttonRow">
+            <button id="startUdp">Listen</button>
+            <button id="stopUdp" class="secondary">Stop</button>
+          </div>
+          <p class="inputState" id="udpStatus">UDP offline</p>
         </div>
 
         <div class="panel">

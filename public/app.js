@@ -1,9 +1,15 @@
 const rows = document.querySelector("#messageRows");
 const stats = document.querySelector("#stats");
-const serialStatus = document.querySelector("#serialStatus");
+const inputStatus = document.querySelector("#inputStatus");
 const portSelect = document.querySelector("#portSelect");
 const baudInput = document.querySelector("#baudInput");
 const adapterSelect = document.querySelector("#adapterSelect");
+const tcpHostInput = document.querySelector("#tcpHostInput");
+const tcpPortInput = document.querySelector("#tcpPortInput");
+const tcpStatus = document.querySelector("#tcpStatus");
+const udpHostInput = document.querySelector("#udpHostInput");
+const udpPortInput = document.querySelector("#udpPortInput");
+const udpStatus = document.querySelector("#udpStatus");
 const filterInput = document.querySelector("#filterInput");
 const protocolFilter = document.querySelector("#protocolFilter");
 const replayText = document.querySelector("#replayText");
@@ -13,6 +19,10 @@ let paused = false;
 document.querySelector("#refreshPorts").addEventListener("click", loadPorts);
 document.querySelector("#startSerial").addEventListener("click", startSerial);
 document.querySelector("#stopSerial").addEventListener("click", stopSerial);
+document.querySelector("#startTcp").addEventListener("click", startTcp);
+document.querySelector("#stopTcp").addEventListener("click", stopTcp);
+document.querySelector("#startUdp").addEventListener("click", startUdp);
+document.querySelector("#stopUdp").addEventListener("click", stopUdp);
 document.querySelector("#runReplay").addEventListener("click", runReplay);
 document.querySelector("#clearLog").addEventListener("click", () => {
   messages.length = 0;
@@ -34,9 +44,10 @@ events.addEventListener("message", (event) => {
   renderRows();
 });
 events.addEventListener("state", (event) => renderState(JSON.parse(event.data)));
-events.addEventListener("error", () => {
-  serialStatus.textContent = "Stream fejl";
-  serialStatus.classList.remove("online");
+events.addEventListener("error", (event) => {
+  const data = event.data ? JSON.parse(event.data) : {};
+  inputStatus.textContent = data.message ? `Fejl: ${data.message}` : "Stream fejl";
+  inputStatus.classList.remove("online");
 });
 
 await loadPorts();
@@ -75,6 +86,34 @@ async function stopSerial() {
   await fetchJson("/api/serial/stop", { method: "POST" });
 }
 
+async function startTcp() {
+  await fetchJson("/api/tcp/start", {
+    method: "POST",
+    body: JSON.stringify({
+      host: tcpHostInput.value,
+      port: Number(tcpPortInput.value || 10110)
+    })
+  });
+}
+
+async function stopTcp() {
+  await fetchJson("/api/tcp/stop", { method: "POST" });
+}
+
+async function startUdp() {
+  await fetchJson("/api/udp/start", {
+    method: "POST",
+    body: JSON.stringify({
+      host: udpHostInput.value,
+      port: Number(udpPortInput.value || 10110)
+    })
+  });
+}
+
+async function stopUdp() {
+  await fetchJson("/api/udp/stop", { method: "POST" });
+}
+
 async function runReplay() {
   await fetchJson("/api/replay", {
     method: "POST",
@@ -83,13 +122,19 @@ async function runReplay() {
 }
 
 function renderState(state) {
-  if (state.serial) {
-    serialStatus.textContent = `${state.serial.device} @ ${state.serial.baud}`;
-    serialStatus.classList.add("online");
-  } else {
-    serialStatus.textContent = "Offline";
-    serialStatus.classList.remove("online");
-  }
+  const activeInputs = [
+    state.serial ? "Serial" : null,
+    state.tcp ? "TCP" : null,
+    state.udp ? "UDP" : null
+  ].filter(Boolean);
+  inputStatus.textContent = activeInputs.length ? activeInputs.join(" + ") : "Offline";
+  inputStatus.classList.toggle("online", activeInputs.length > 0);
+  tcpStatus.textContent = state.tcp
+    ? `TCP ${state.tcp.status}: ${state.tcp.host}:${state.tcp.port}`
+    : "TCP offline";
+  udpStatus.textContent = state.udp
+    ? `UDP ${state.udp.status}: ${state.udp.host}:${state.udp.port}`
+    : "UDP offline";
 
   const counters = state.counters || {};
   stats.innerHTML = [

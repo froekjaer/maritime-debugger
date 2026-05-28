@@ -14,6 +14,8 @@ Open <http://localhost:8787>.
 
 - NMEA 0183 text: `$..*hh` and `!..*hh` sentences from serial or replay text.
 - CAN-over-serial SLCAN: `t...` and `T...` frames from serial or replay text.
+- TCP text streams, commonly used by NMEA 0183 and gateway bridges.
+- UDP text datagrams, commonly used by NMEA 0183 and gateway bridges.
 - NMEA 2000 `$PCDIN` text frames.
 - Linux `candump` style lines.
 - Vela-Navega N2K0183 debug and port conversion lines.
