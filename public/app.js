@@ -142,7 +142,7 @@ async function importJson() {
   }
 
   const text = await file.text();
-  const parsed = JSON.parse(text);
+  const parsed = parseImportJson(text);
   const imported = Array.isArray(parsed) ? parsed : parsed.messages || parsed.events || [];
   if (!Array.isArray(imported)) throw new Error("JSON must be an array or contain a messages/events array.");
 
@@ -159,6 +159,46 @@ async function importJson() {
   if (messages.length > 5000) messages.length = 5000;
   renderRows();
   jsonImportStatus.textContent = `Imported ${imported.length} messages`;
+}
+
+function parseImportJson(text) {
+  const attempts = [
+    text,
+    stripHashCommentLines(text),
+    extractJsonPayload(stripHashCommentLines(text)),
+    extractJsonPayload(text)
+  ].filter(Boolean);
+
+  let lastError = null;
+  for (const attempt of attempts) {
+    try {
+      return JSON.parse(attempt);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error("No JSON payload found.");
+}
+
+function stripHashCommentLines(text) {
+  return text
+    .split(/\r?\n/)
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n")
+    .trim();
+}
+
+function extractJsonPayload(text) {
+  const trimmed = text.trim();
+  const firstArray = trimmed.indexOf("[");
+  const firstObject = trimmed.indexOf("{");
+  const starts = [firstArray, firstObject].filter((index) => index >= 0);
+  if (!starts.length) return "";
+  const start = Math.min(...starts);
+  const opener = trimmed[start];
+  const closer = opener === "[" ? "]" : "}";
+  const end = trimmed.lastIndexOf(closer);
+  return end > start ? trimmed.slice(start, end + 1) : "";
 }
 
 async function applyInputFilter() {
