@@ -162,12 +162,19 @@ async function importJson() {
 }
 
 function parseImportJson(text) {
+  const withoutHashComments = stripHashCommentLines(text);
+  const extractedFromCleaned = extractJsonPayload(withoutHashComments);
+  const extractedFromRaw = extractJsonPayload(text);
   const attempts = [
     text,
-    stripHashCommentLines(text),
-    extractJsonPayload(stripHashCommentLines(text)),
-    extractJsonPayload(text)
+    withoutHashComments,
+    extractedFromCleaned,
+    extractedFromRaw
   ].filter(Boolean);
+
+  if (!extractedFromCleaned && !extractedFromRaw && !looksLikeJsonStart(withoutHashComments)) {
+    throw new Error("No JSON array or object found in this file.");
+  }
 
   let lastError = null;
   for (const attempt of attempts) {
@@ -178,6 +185,11 @@ function parseImportJson(text) {
     }
   }
   throw lastError || new Error("No JSON payload found.");
+}
+
+function looksLikeJsonStart(text) {
+  const first = text.trimStart()[0];
+  return first === "[" || first === "{";
 }
 
 function stripHashCommentLines(text) {
