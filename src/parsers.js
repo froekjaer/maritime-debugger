@@ -1,18 +1,45 @@
 const NMEA0183_FIELDS = {
   GGA: ["utc", "latitude", "latHemisphere", "longitude", "lonHemisphere", "quality", "satellites", "hdop", "altitude", "altitudeUnit", "geoidSeparation", "geoidUnit", "dgpsAge", "dgpsStation"],
-  RMC: ["utc", "status", "latitude", "latHemisphere", "longitude", "lonHemisphere", "speedKnots", "courseTrue", "date", "magneticVariation", "variationDirection", "mode"],
+  RMC: ["utc", "status", "latitude", "latHemisphere", "longitude", "lonHemisphere", "speedKnots", "courseTrue", "date", "magneticVariation", "variationDirection", "mode", "navStatus"],
   HDG: ["headingMagnetic", "deviation", "deviationDirection", "variation", "variationDirection"],
   HDT: ["headingTrue", "trueIndicator"],
   MWV: ["windAngle", "reference", "windSpeed", "speedUnit", "status"],
-  VHW: ["headingTrue", "trueIndicator", "headingMagnetic", "magneticIndicator", "speedKnots", "knotsUnit", "speedKmh", "kmhUnit"],
+  VHW: ["headingTrue", "trueIndicator", "headingMagnetic", "magneticIndicator", "speedKnots", "knotsUnit", "speedKmh", "kmhUnit", "extra"],
+  DBK: ["depthFeet", "feetUnit", "depthMeters", "metersUnit", "depthFathoms", "fathomsUnit"],
   DBT: ["depthFeet", "feetUnit", "depthMeters", "metersUnit", "depthFathoms", "fathomsUnit"],
   DPT: ["depthMeters", "offsetMeters", "maxRangeMeters"],
+  DSC: ["formatSpecifier", "address", "category", "natureOrFirstTelecommand", "secondTelecommand", "thirdTelecommand", "fourthTelecommand", "positionOrChannel", "timeOrTelephone", "mmsiOrExpansion", "mode"],
+  DSE: ["totalSentences", "sentenceNumber", "queryReplyFlag", "address", "dataSet1Code", "dataSet1Data", "dataSet2Code", "dataSet2Data", "dataSet3Code", "dataSet3Data", "dataSet4Code", "dataSet4Data"],
+  DSI: ["formatSpecifier", "address", "category", "natureOrFirstTelecommand", "secondTelecommand", "thirdTelecommand", "fourthTelecommand", "positionOrChannel", "timeOrTelephone", "mmsiOrExpansion", "mode"],
+  DSR: ["formatSpecifier", "address", "category", "natureOrFirstTelecommand", "secondTelecommand", "thirdTelecommand", "fourthTelecommand", "positionOrChannel", "timeOrTelephone", "mmsiOrExpansion", "mode"],
   GSA: ["mode", "fixType", "satellite1", "satellite2", "satellite3", "satellite4", "satellite5", "satellite6", "satellite7", "satellite8", "satellite9", "satellite10", "satellite11", "satellite12", "pdop", "hdop", "vdop", "systemId"],
   GSV: ["messageCount", "messageNumber", "satellitesInView", "satellite1Id", "satellite1Elevation", "satellite1Azimuth", "satellite1Snr", "satellite2Id", "satellite2Elevation", "satellite2Azimuth", "satellite2Snr", "satellite3Id", "satellite3Elevation", "satellite3Azimuth", "satellite3Snr", "satellite4Id", "satellite4Elevation", "satellite4Azimuth", "satellite4Snr", "signalId"],
   MTW: ["waterTemperature", "celsiusUnit"],
   VTG: ["courseTrue", "trueIndicator", "courseMagnetic", "magneticIndicator", "speedKnots", "knotsUnit", "speedKmh", "kmhUnit", "mode"],
   VDM: ["fragmentCount", "fragmentNumber", "messageId", "radioChannel", "payload", "fillBits"],
   VDO: ["fragmentCount", "fragmentNumber", "messageId", "radioChannel", "payload", "fillBits"]
+};
+
+const NMEA0183_SENTENCE_NAMES = {
+  DBK: "Depth Below Keel",
+  DBT: "Depth Below Transducer",
+  DPT: "Depth",
+  DSC: "Digital Selective Calling",
+  DSE: "Expanded Digital Selective Calling",
+  DSI: "DSC Transponder Initiate",
+  DSR: "DSC Transponder Response",
+  GGA: "GNSS Fix Data",
+  GSA: "GNSS DOP and Active Satellites",
+  GSV: "GNSS Satellites in View",
+  HDG: "Heading, Deviation and Variation",
+  HDT: "Heading, True",
+  MTW: "Water Temperature",
+  MWV: "Wind Speed and Angle",
+  RMC: "Recommended Minimum GNSS Data",
+  VDM: "AIS VHF Data-link Message",
+  VDO: "AIS Own-vessel VHF Data-link Message",
+  VHW: "Water Speed and Heading",
+  VTG: "Course Over Ground and Ground Speed"
 };
 
 const FAST_PACKET_PGNS = new Set([
@@ -32,6 +59,7 @@ const PGN_NAMES = {
   126208: "NMEA Request/Command/Acknowledge",
   126464: "PGN List",
   126992: "System Time",
+  126993: "Heartbeat",
   126996: "Product Information",
   127245: "Rudder",
   127250: "Vessel Heading",
@@ -55,6 +83,8 @@ const PGN_NAMES = {
   129283: "Cross Track Error",
   129284: "Navigation Data",
   129285: "Route/WP Information",
+  129539: "GNSS DOPs",
+  129540: "GNSS Satellites in View",
   129793: "AIS UTC and Date Report",
   129794: "AIS Class A Static and Voyage Related Data",
   129795: "AIS Addressed Binary Message",
@@ -122,7 +152,7 @@ export function parseNmea0183(raw) {
   return {
     protocol: "nmea0183",
     level: checksum === null || checksum === calculatedChecksum ? "ok" : "warn",
-    summary: `${talker || "??"} ${sentence || "unknown"}`,
+    summary: `${talker || "??"} ${sentence || "unknown"}${NMEA0183_SENTENCE_NAMES[sentence] ? ` ${NMEA0183_SENTENCE_NAMES[sentence]}` : ""}`,
     raw,
     talker,
     sentence,
@@ -211,7 +241,7 @@ export function parseVelaN2kDebug(raw) {
 
   const pgn = Number(match.groups.pgn);
   const source = Number(match.groups.source);
-  const description = match.groups.description || PGN_NAMES[pgn] || "Unknown PGN";
+  const description = match.groups.description || pgnName(pgn);
   return {
     protocol: "nmea2000-debug",
     level: "ok",
@@ -219,7 +249,7 @@ export function parseVelaN2kDebug(raw) {
     raw,
     nmea2000: {
       pgn,
-      name: PGN_NAMES[pgn] || description,
+      name: pgnName(pgn, description),
       source,
       destination: null,
       filterCode: match.groups.filter,
@@ -260,7 +290,7 @@ export function parsePortN2kConversion(raw) {
   return {
     protocol: "nmea2000-conversion",
     level: "ok",
-    summary: `${match.groups.port ? `${match.groups.port}>N2K ` : ""}${pgn} ${description || PGN_NAMES[pgn] || "Unknown PGN"}`,
+    summary: `${match.groups.port ? `${match.groups.port}>N2K ` : ""}${pgn} ${description || pgnName(pgn)}`,
     raw,
     conversion: {
       port: match.groups.port || null,
@@ -268,7 +298,7 @@ export function parsePortN2kConversion(raw) {
     },
     nmea2000: {
       pgn,
-      name: PGN_NAMES[pgn] || description || "Unknown PGN",
+      name: pgnName(pgn, description),
       source: null,
       destination: null,
       pgnHex: match.groups.pgnHex,
@@ -291,7 +321,7 @@ export function parsePcdin(raw) {
   const data = dataHex.match(/../g) || [];
   const name = pgn === 0 && data.length === 0
     ? "PCDIN Empty Frame"
-    : PGN_NAMES[pgn] || "Unknown PGN";
+    : pgnName(pgn);
 
   return {
     ...sentence,
@@ -320,6 +350,15 @@ function xorChecksum(body) {
   return checksum;
 }
 
+function pgnName(pgn, fallback = "") {
+  const cleanedFallback = fallback && !/^unknown\b/i.test(fallback.trim()) ? fallback.trim() : "";
+  if (PGN_NAMES[pgn]) return PGN_NAMES[pgn];
+  if (pgn >= 65280 && pgn <= 65535) return "Manufacturer Proprietary";
+  if (pgn >= 130816 && pgn <= 130831) return "Manufacturer Proprietary, Fast Packet";
+  if (pgn === 0) return cleanedFallback || "PGN 0 Placeholder";
+  return cleanedFallback || "Unknown PGN";
+}
+
 function decodeNmea2000CanId(id, data) {
   const priority = (id >> 26) & 0x7;
   const dataPage = (id >> 24) & 0x1;
@@ -334,7 +373,7 @@ function decodeNmea2000CanId(id, data) {
   return {
     priority,
     pgn,
-    name: PGN_NAMES[pgn] || "Unknown PGN",
+    name: pgnName(pgn),
     source,
     destination,
     pduFormat,
@@ -361,8 +400,14 @@ function decodeKnownPgn(pgn, data) {
   switch (pgn) {
     case 0:
       return {
-        note: "Empty PCDIN frame",
+        note: bytes.length ? "PGN 0 placeholder frame" : "Empty PCDIN frame",
         dataLength: bytes.length
+      };
+    case 126993:
+      return {
+        dataLength: bytes.length,
+        interval: bytes.length >= 2 ? u16(0) : null,
+        sequenceCounter: bytes[2] ?? null
       };
     case 127250:
       return {
@@ -401,6 +446,22 @@ function decodeKnownPgn(pgn, data) {
         cogReference: bytes[1] & 0x3 ? "Magnetic" : "True",
         cogDeg: round(radiansToDegrees(u16(2) * 0.0001), 3),
         sogMs: round(u16(4) * 0.01, 3)
+      };
+    case 129539:
+      return {
+        sid: bytes[0],
+        desiredMode: bytes[1] & 0xf,
+        actualMode: (bytes[1] >> 4) & 0xf,
+        hdop: nullableU16(u16(2), 0.01),
+        vdop: nullableU16(u16(4), 0.01),
+        tdop: nullableU16(u16(6), 0.01)
+      };
+    case 129540:
+      return {
+        dataLength: bytes.length,
+        sid: bytes[0],
+        mode: bytes[1] ?? null,
+        satelliteCount: bytes[2] ?? null
       };
     case 129038:
     case 129039:
@@ -448,6 +509,13 @@ function decodeKnownPgn(pgn, data) {
         reference: ["True North", "Magnetic", "Apparent", "True Boat", "True Water", "Error", "Null"][bytes[5] & 0x7] || "Unknown"
       };
     default:
+      if ((pgn >= 65280 && pgn <= 65535) || (pgn >= 130816 && pgn <= 130831)) {
+        return {
+          proprietary: true,
+          dataLength: bytes.length,
+          dataHex: data.join("")
+        };
+      }
       return {};
   }
 }
@@ -455,6 +523,11 @@ function decodeKnownPgn(pgn, data) {
 function nullableAngle(rawValue) {
   if (rawValue === 0x7fff || rawValue === -1) return null;
   return round(rawValue * 0.0001 * 180 / Math.PI, 3);
+}
+
+function nullableU16(rawValue, scale = 1) {
+  if (rawValue === 0xffff) return null;
+  return round(rawValue * scale, 3);
 }
 
 function asciiField(bytes, offset, length) {
