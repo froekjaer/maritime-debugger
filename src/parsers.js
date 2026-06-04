@@ -48,9 +48,23 @@ const PGN_NAMES = {
   129026: "COG/SOG, Rapid Update",
   129029: "GNSS Position Data",
   129033: "Local Time Offset",
+  129038: "AIS Class A Position Report",
+  129039: "AIS Class B Position Report",
+  129040: "AIS Class B Extended Position Report",
+  129041: "AIS Aids to Navigation Report",
   129283: "Cross Track Error",
   129284: "Navigation Data",
   129285: "Route/WP Information",
+  129793: "AIS UTC and Date Report",
+  129794: "AIS Class A Static and Voyage Related Data",
+  129795: "AIS Addressed Binary Message",
+  129796: "AIS Acknowledge",
+  129797: "AIS Binary Broadcast Message",
+  129798: "AIS SAR Aircraft Position Report",
+  129801: "AIS Addressed Safety Related Message",
+  129802: "AIS Safety Related Broadcast Message",
+  129809: "AIS Class B Static Data Report, Part A",
+  129810: "AIS Class B Static Data Report, Part B",
   130306: "Wind Data",
   130310: "Environmental Parameters",
   130311: "Environmental Parameters",
@@ -275,11 +289,14 @@ export function parsePcdin(raw) {
   const pgn = Number.parseInt(pgnHex, 16);
   const source = Number.parseInt(sourceHex, 16);
   const data = dataHex.match(/../g) || [];
+  const name = pgn === 0 && data.length === 0
+    ? "PCDIN Empty Frame"
+    : PGN_NAMES[pgn] || "Unknown PGN";
 
   return {
     ...sentence,
     protocol: "nmea2000-pcdin",
-    summary: `${pgn} ${PGN_NAMES[pgn] || "Unknown PGN"}`,
+    summary: `${pgn} ${name}`,
     pcdin: {
       pgnHex,
       timestampHex,
@@ -288,7 +305,7 @@ export function parsePcdin(raw) {
     },
     nmea2000: {
       pgn,
-      name: PGN_NAMES[pgn] || "Unknown PGN",
+      name,
       source,
       destination: null,
       fastPacket: FAST_PACKET_PGNS.has(pgn),
@@ -342,6 +359,11 @@ function decodeKnownPgn(pgn, data) {
   const radiansToDegrees = (value) => value * 180 / Math.PI;
 
   switch (pgn) {
+    case 0:
+      return {
+        note: "Empty PCDIN frame",
+        dataLength: bytes.length
+      };
     case 127250:
       return {
         sid: bytes[0],
@@ -380,6 +402,44 @@ function decodeKnownPgn(pgn, data) {
         cogDeg: round(radiansToDegrees(u16(2) * 0.0001), 3),
         sogMs: round(u16(4) * 0.01, 3)
       };
+    case 129038:
+    case 129039:
+    case 129040:
+    case 129041:
+    case 129793:
+    case 129795:
+    case 129796:
+    case 129797:
+    case 129798:
+    case 129801:
+    case 129802:
+      return {
+        dataLength: bytes.length,
+        messageId: bytes[0] & 0x3f,
+        userId: bytes.length >= 5 ? u32(1) : null
+      };
+    case 129794:
+      return {
+        dataLength: bytes.length,
+        messageId: bytes[0] & 0x3f,
+        userId: bytes.length >= 5 ? u32(1) : null,
+        text: printableAscii(bytes)
+      };
+    case 129809:
+      return {
+        dataLength: bytes.length,
+        messageId: bytes[0] & 0x3f,
+        userId: bytes.length >= 5 ? u32(1) : null,
+        vesselName: asciiField(bytes, 5, 20),
+        text: printableAscii(bytes)
+      };
+    case 129810:
+      return {
+        dataLength: bytes.length,
+        messageId: bytes[0] & 0x3f,
+        userId: bytes.length >= 5 ? u32(1) : null,
+        text: printableAscii(bytes)
+      };
     case 130306:
       return {
         sid: bytes[0],
@@ -395,6 +455,24 @@ function decodeKnownPgn(pgn, data) {
 function nullableAngle(rawValue) {
   if (rawValue === 0x7fff || rawValue === -1) return null;
   return round(rawValue * 0.0001 * 180 / Math.PI, 3);
+}
+
+function asciiField(bytes, offset, length) {
+  return bytes
+    .slice(offset, offset + length)
+    .filter((byte) => byte >= 0x20 && byte <= 0x7e)
+    .map((byte) => String.fromCharCode(byte))
+    .join("")
+    .trim() || null;
+}
+
+function printableAscii(bytes) {
+  const text = bytes
+    .map((byte) => byte >= 0x20 && byte <= 0x7e ? String.fromCharCode(byte) : " ")
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text || null;
 }
 
 function round(value, decimals) {
