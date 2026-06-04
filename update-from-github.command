@@ -4,9 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REMOTE="${REMOTE:-origin}"
-BRANCH="${1:-$(git branch --show-current)}"
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+BRANCH="${1:-$current_branch}"
 
-if [[ -z "$BRANCH" ]]; then
+if [[ -z "$BRANCH" || "$BRANCH" == "HEAD" ]]; then
   echo "Could not determine the current Git branch."
   echo "Run: ./update-from-github.command main"
   exit 1
@@ -38,14 +39,13 @@ if ! git show-ref --verify --quiet "refs/remotes/$REMOTE/$BRANCH"; then
   exit 1
 fi
 
-current_branch="$(git branch --show-current)"
 if [[ "$current_branch" != "$BRANCH" ]]; then
   if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     echo "Switching to local branch '$BRANCH'..."
-    git switch "$BRANCH"
+    git checkout "$BRANCH"
   else
     echo "Creating local branch '$BRANCH' from '$REMOTE/$BRANCH'..."
-    git switch -c "$BRANCH" "$REMOTE/$BRANCH"
+    git checkout -b "$BRANCH" "$REMOTE/$BRANCH"
   fi
 fi
 
