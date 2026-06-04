@@ -17,6 +17,7 @@ const state = {
   serialStream: null,
   tcp: null,
   tcpSocket: null,
+  tcpProcess: null,
   udp: null,
   udpSocket: null,
   buffers: {
@@ -122,11 +123,13 @@ async function handleTcpStart(req, res) {
   state.tcpSocket = socket;
   state.tcp = { host, port, timeoutMs, status: "connecting", startedAt: new Date().toISOString() };
   socket.on("connect", () => {
+    if (state.tcpSocket !== socket) return;
     state.tcp = { ...state.tcp, status: "connected", localPort: socket.localPort };
     broadcast("state", publicState());
   });
   socket.on("data", (chunk) => readChunk(chunk, "tcp"));
   socket.on("error", (error) => {
+    if (state.tcpSocket !== socket) return;
     broadcast("error", { source: "tcp", message: error.message });
     state.tcp = { ...state.tcp, status: "error", error: error.message };
     broadcast("state", publicState());
@@ -135,6 +138,7 @@ async function handleTcpStart(req, res) {
     socket.destroy(new Error(`TCP connection timed out after ${timeoutMs} ms`));
   });
   socket.on("close", () => {
+    if (state.tcpSocket !== socket) return;
     if (state.tcp?.status === "connected") {
       state.tcp = { ...state.tcp, status: "closed", closedAt: new Date().toISOString() };
     }
@@ -148,6 +152,16 @@ async function handleTcpStart(req, res) {
     await waitForTcpConnect(socket);
     sendJson(res, publicState());
   } catch (error) {
+    if (shouldFallbackToNc(error)) {
+      try {
+        socket.removeAllListeners();
+        socket.destroy();
+        await startNcTcp(host, port, timeoutMs, error);
+        return sendJson(res, publicState());
+      } catch (fallbackError) {
+        error = new Error(`${error.message}; nc fallback failed: ${fallbackError.message}`);
+      }
+    }
     state.tcp = { host, port, timeoutMs, status: "error", error: error.message, startedAt: state.tcp?.startedAt };
     state.tcpSocket = null;
     broadcast("error", { source: "tcp", message: error.message });
@@ -277,8 +291,10 @@ function stopSerial() {
 
 function stopTcp() {
   if (state.tcpSocket) state.tcpSocket.destroy();
+  if (state.tcpProcess) state.tcpProcess.kill();
   state.tcp = null;
   state.tcpSocket = null;
+  state.tcpProcess = null;
   state.buffers.tcp = "";
 }
 
@@ -338,6 +354,87 @@ function waitForTcpConnect(socket) {
   return new Promise((resolve, reject) => {
     socket.once("connect", resolve);
     socket.once("error", reject);
+  });
+}
+
+function shouldFallbackToNc(error) {
+  return os.platform() === "darwin" && error?.code === "EHOSTUNREACH";
+}
+
+function startNcTcp(host, port, timeoutMs, originalError) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("nc", ["-v", host, String(port)]);
+    let settled = false;
+    let connected = false;
+    let stderr = "";
+    const startedAt = new Date().toISOString();
+
+    state.tcpProcess = child;
+    state.tcpSocket = null;
+    state.tcp = {
+      host,
+      port,
+      timeoutMs,
+      status: "connecting",
+      adapter: "nc",
+      fallbackFrom: originalError.message,
+      startedAt
+    };
+    broadcast("error", { source: "tcp", message: `Node TCP failed (${originalError.message}); trying nc fallback.` });
+    broadcast("state", publicState());
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill();
+      reject(new Error(`nc connection timed out after ${timeoutMs} ms`));
+    }, timeoutMs);
+
+    const markConnected = () => {
+      if (connected) return;
+      connected = true;
+      clearTimeout(timer);
+      state.tcp = { ...state.tcp, status: "connected" };
+      broadcast("state", publicState());
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      markConnected();
+      readChunk(chunk, "tcp");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+      if (/succeeded|open/i.test(stderr)) markConnected();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (!settled) {
+        settled = true;
+        reject(new Error(stderr.trim() || `nc exited with ${code}`));
+        return;
+      }
+      if (state.tcpProcess === child) {
+        state.tcpProcess = null;
+        state.tcp = connected
+          ? { ...state.tcp, status: "closed", closedAt: new Date().toISOString() }
+          : state.tcp;
+        state.buffers.tcp = "";
+        broadcast("state", publicState());
+      }
+    });
   });
 }
 
