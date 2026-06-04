@@ -187,19 +187,22 @@ function renderRows() {
   const action = filterAction.value;
   const protocol = protocolFilter.value;
   const visible = messages
-    .filter((message) => !protocol || message.protocol === protocol)
+    .filter((message) => matchesProtocolFilter(message, protocol))
     .filter((message) => matchesTextFilter(message, terms, logic, action))
     .slice(0, 500);
 
-  rows.innerHTML = visible.map((message) => `
+  rows.innerHTML = visible.map((message) => {
+    const category = labelCategory(message);
+    return `
     <tr class="${message.level === "warn" ? "warn" : ""}">
       <td>${new Date(message.timestamp).toLocaleTimeString()}</td>
-      <td><span class="badge ${message.protocol}">${labelProtocol(message.protocol)}</span></td>
+      <td><span class="badge ${message.protocol} ${category.className}">${category.label || labelProtocol(message.protocol)}</span></td>
       <td>${escapeHtml(message.summary || "")}</td>
       <td>${escapeHtml(formatDecoded(message))}</td>
       <td>${escapeHtml(message.raw || "")}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function passesInputFilter(message) {
@@ -268,6 +271,29 @@ function labelProtocol(protocol) {
     can: "CAN",
     raw: "Raw"
   }[protocol] || protocol;
+}
+
+function matchesProtocolFilter(message, filter) {
+  if (!filter) return true;
+  if (filter === "ais") return isAisMessage(message);
+  if (filter === "dsc") return isDscMessage(message);
+  return message.protocol === filter;
+}
+
+function labelCategory(message) {
+  if (isAisMessage(message)) return { className: "ais", label: "AIS" };
+  if (isDscMessage(message)) return { className: "dsc", label: "DSC" };
+  return { className: "", label: "" };
+}
+
+function isAisMessage(message) {
+  if (message.protocol === "nmea0183" && ["VDM", "VDO"].includes(message.sentence)) return true;
+  return /^AIS\b/.test(message.nmea2000?.name || message.summary || "");
+}
+
+function isDscMessage(message) {
+  if (message.protocol === "nmea0183" && ["DSC", "DSE", "DSI", "DSR"].includes(message.sentence)) return true;
+  return /^(DSC|DSE|DSI|DSR)\b/.test(message.nmea2000?.name || message.summary || "");
 }
 
 function exportJson() {

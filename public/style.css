@@ -299,6 +299,8 @@ tr.warn td {
 .badge.nmea2000-conversion { background: #eaf0ff; color: var(--blue); }
 .badge.can { background: #fff1d6; color: var(--amber); }
 .badge.raw { background: #f0f0f0; color: #555; }
+.badge.ais { background: #e3f7f3; color: #00796b; }
+.badge.dsc { background: #f4e8ff; color: #6a1b9a; }
 
 @media (max-width: 900px) {
   .topbar {
