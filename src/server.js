@@ -40,13 +40,13 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/events") return handleEvents(req, res);
     if (url.pathname === "/api/ports") return sendJson(res, await listPorts());
     if (url.pathname === "/api/state") return sendJson(res, publicState());
-    if (url.pathname === "/api/serial/start" && req.method === "POST") return handleSerialStart(req, res);
+    if (url.pathname === "/api/serial/start" && req.method === "POST") return await handleSerialStart(req, res);
     if (url.pathname === "/api/serial/stop" && req.method === "POST") return handleSerialStop(res);
-    if (url.pathname === "/api/tcp/start" && req.method === "POST") return handleTcpStart(req, res);
+    if (url.pathname === "/api/tcp/start" && req.method === "POST") return await handleTcpStart(req, res);
     if (url.pathname === "/api/tcp/stop" && req.method === "POST") return handleTcpStop(res);
-    if (url.pathname === "/api/udp/start" && req.method === "POST") return handleUdpStart(req, res);
+    if (url.pathname === "/api/udp/start" && req.method === "POST") return await handleUdpStart(req, res);
     if (url.pathname === "/api/udp/stop" && req.method === "POST") return handleUdpStop(res);
-    if (url.pathname === "/api/replay" && req.method === "POST") return handleReplay(req, res);
+    if (url.pathname === "/api/replay" && req.method === "POST") return await handleReplay(req, res);
     return serveStatic(url.pathname, res);
   } catch (error) {
     sendJson(res, { error: error.message }, 500);
@@ -147,7 +147,8 @@ function handleTcpStop(res) {
 async function handleUdpStart(req, res) {
   const body = await readJson(req);
   const port = Number(body.port || 0);
-  const host = String(body.host || "0.0.0.0").trim() || "0.0.0.0";
+  const requestedHost = String(body.host || "0.0.0.0").trim() || "0.0.0.0";
+  const { host, warning } = resolveUdpBindHost(requestedHost);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return sendJson(res, { error: "UDP listen port is required." }, 400);
   }
@@ -156,7 +157,7 @@ async function handleUdpStart(req, res) {
   state.buffers.udp = "";
   const socket = dgram.createSocket("udp4");
   state.udpSocket = socket;
-  state.udp = { host, port, status: "binding", startedAt: new Date().toISOString() };
+  state.udp = { host, port, requestedHost, warning, status: "binding", startedAt: new Date().toISOString() };
   socket.on("message", (message, remote) => {
     const source = `udp ${remote.address}:${remote.port}`;
     readDatagram(message.toString("utf8"), source);
@@ -181,6 +182,7 @@ async function handleUdpStart(req, res) {
 
   const address = socket.address();
   state.udp = { ...state.udp, status: "listening", host: address.address, port: address.port };
+  if (warning) broadcast("error", { source: "udp", message: warning });
   broadcast("state", publicState());
   sendJson(res, publicState());
 }
@@ -327,6 +329,37 @@ async function listPorts() {
     .map((name) => path.join(devDir, name))
     .sort();
   return { ports };
+}
+
+function resolveUdpBindHost(host) {
+  if (host === "::") {
+    return {
+      host: "0.0.0.0",
+      warning: "UDP uses IPv4 in this app; listening on all IPv4 interfaces instead of ::."
+    };
+  }
+  if (isWildcardAddress(host) || isLocalAddress(host)) {
+    return { host };
+  }
+
+  return {
+    host: "0.0.0.0",
+    warning: `UDP bind address ${host} is not assigned to this computer; listening on all interfaces instead.`
+  };
+}
+
+function isWildcardAddress(host) {
+  return host === "0.0.0.0" || host.toLowerCase() === "localhost";
+}
+
+function isLocalAddress(host) {
+  if (host === "127.0.0.1") return true;
+  for (const addresses of Object.values(os.networkInterfaces())) {
+    for (const address of addresses || []) {
+      if (address.family === "IPv4" && address.address === host) return true;
+    }
+  }
+  return false;
 }
 
 function serveStatic(urlPath, res) {
