@@ -100,6 +100,7 @@ h2 {
 
 .panelHeader,
 .buttonRow,
+.filterControls,
 .toolbar {
   display: flex;
   align-items: center;
@@ -174,6 +175,14 @@ button.secondary {
   margin-top: 12px;
 }
 
+.filterControls {
+  align-items: flex-end;
+}
+
+.filterControls label {
+  flex: 1;
+}
+
 .inputState {
   margin-top: 10px;
   color: var(--muted);
@@ -224,6 +233,10 @@ button.secondary {
 }
 
 .toolbar select {
+  width: 120px;
+}
+
+.toolbar #protocolFilter {
   width: 160px;
 }
 

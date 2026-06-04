@@ -10,7 +10,13 @@ const tcpStatus = document.querySelector("#tcpStatus");
 const udpHostInput = document.querySelector("#udpHostInput");
 const udpPortInput = document.querySelector("#udpPortInput");
 const udpStatus = document.querySelector("#udpStatus");
+const inputFilterInput = document.querySelector("#inputFilterInput");
+const inputFilterLogic = document.querySelector("#inputFilterLogic");
+const inputFilterAction = document.querySelector("#inputFilterAction");
+const inputFilterStatus = document.querySelector("#inputFilterStatus");
 const filterInput = document.querySelector("#filterInput");
+const filterLogic = document.querySelector("#filterLogic");
+const filterAction = document.querySelector("#filterAction");
 const protocolFilter = document.querySelector("#protocolFilter");
 const replayText = document.querySelector("#replayText");
 const messages = [];
@@ -33,13 +39,20 @@ document.querySelector("#pauseLog").addEventListener("click", (event) => {
   event.currentTarget.textContent = paused ? "Fortsæt" : "Pause";
 });
 document.querySelector("#exportJson").addEventListener("click", exportJson);
+inputFilterInput.addEventListener("input", renderInputFilterStatus);
+inputFilterLogic.addEventListener("change", renderInputFilterStatus);
+inputFilterAction.addEventListener("change", renderInputFilterStatus);
 filterInput.addEventListener("input", renderRows);
+filterLogic.addEventListener("change", renderRows);
+filterAction.addEventListener("change", renderRows);
 protocolFilter.addEventListener("change", renderRows);
 
 const events = new EventSource("/events");
 events.addEventListener("message", (event) => {
   if (paused) return;
-  messages.unshift(JSON.parse(event.data));
+  const message = JSON.parse(event.data);
+  if (!passesInputFilter(message)) return;
+  messages.unshift(message);
   if (messages.length > 1500) messages.pop();
   renderRows();
 });
@@ -51,6 +64,7 @@ events.addEventListener("error", (event) => {
 });
 
 await loadPorts();
+renderInputFilterStatus();
 renderRows();
 
 async function loadPorts() {
@@ -148,11 +162,13 @@ function renderState(state) {
 }
 
 function renderRows() {
-  const query = filterInput.value.trim().toLowerCase();
+  const terms = parseFilterTerms(filterInput.value);
+  const logic = filterLogic.value;
+  const action = filterAction.value;
   const protocol = protocolFilter.value;
   const visible = messages
     .filter((message) => !protocol || message.protocol === protocol)
-    .filter((message) => !query || JSON.stringify(message).toLowerCase().includes(query))
+    .filter((message) => matchesTextFilter(message, terms, logic, action))
     .slice(0, 500);
 
   rows.innerHTML = visible.map((message) => `
@@ -164,6 +180,39 @@ function renderRows() {
       <td>${escapeHtml(message.raw || "")}</td>
     </tr>
   `).join("");
+}
+
+function passesInputFilter(message) {
+  const terms = parseFilterTerms(inputFilterInput.value);
+  return matchesTextFilter(message, terms, inputFilterLogic.value, inputFilterAction.value);
+}
+
+function renderInputFilterStatus() {
+  const terms = parseFilterTerms(inputFilterInput.value);
+  if (!terms.length) {
+    inputFilterStatus.textContent = "Ingen inputfilter";
+    return;
+  }
+  const action = inputFilterAction.value === "drop" ? "Drop" : "Pass";
+  const logic = inputFilterLogic.value.toUpperCase();
+  inputFilterStatus.textContent = `${action} ${logic}: ${terms.join(", ")}`;
+}
+
+function parseFilterTerms(value) {
+  return value
+    .toLowerCase()
+    .split(/[\s,;|]+/)
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+function matchesTextFilter(message, terms, logic, action) {
+  if (!terms.length) return true;
+  const haystack = JSON.stringify(message).toLowerCase();
+  const matched = logic === "and"
+    ? terms.every((term) => haystack.includes(term))
+    : terms.some((term) => haystack.includes(term));
+  return action === "drop" ? !matched : matched;
 }
 
 function formatDecoded(message) {

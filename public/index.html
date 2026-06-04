@@ -86,12 +86,45 @@
           </div>
         </div>
 
+        <div class="panel">
+          <h2>Input filter</h2>
+          <label>
+            Match
+            <input id="inputFilterInput" type="search" placeholder="127505, fuel, udp" autocomplete="off">
+          </label>
+          <div class="filterControls">
+            <label>
+              Logic
+              <select id="inputFilterLogic">
+                <option value="or">OR</option>
+                <option value="and">AND</option>
+              </select>
+            </label>
+            <label>
+              Action
+              <select id="inputFilterAction">
+                <option value="pass">Pass</option>
+                <option value="drop">Drop</option>
+              </select>
+            </label>
+          </div>
+          <p class="inputState" id="inputFilterStatus">Ingen inputfilter</p>
+        </div>
+
         <div class="panel stats" id="stats"></div>
       </section>
 
       <section class="messages">
         <div class="toolbar">
-          <input id="filterInput" type="search" placeholder="Filtrer på PGN, sentence, source, raw...">
+          <input id="filterInput" type="search" placeholder="Søg: 127505, fuel, udp">
+          <select id="filterLogic" title="Match alle eller mindst et søgefilter">
+            <option value="or">OR</option>
+            <option value="and">AND</option>
+          </select>
+          <select id="filterAction" title="Vis eller skjul matchende søgeresultater">
+            <option value="pass">Pass</option>
+            <option value="drop">Drop</option>
+          </select>
           <select id="protocolFilter">
             <option value="">Alle</option>
             <option value="nmea0183">NMEA 0183</option>
