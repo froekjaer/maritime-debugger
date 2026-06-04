@@ -107,16 +107,20 @@ async function handleTcpStart(req, res) {
   const body = await readJson(req);
   const host = String(body.host || "").trim();
   const port = Number(body.port || 0);
+  const timeoutMs = Math.max(1000, Math.min(Number(body.timeoutMs || 8000), 60000));
   if (!host || !Number.isInteger(port) || port < 1 || port > 65535) {
     return sendJson(res, { error: "TCP host and port are required." }, 400);
+  }
+  if (isWildcardAddress(host) || host === "::") {
+    return sendJson(res, { error: "TCP host must be the remote device IP or hostname, not a bind address like 0.0.0.0." }, 400);
   }
 
   stopTcp();
   state.buffers.tcp = "";
-  const socket = net.createConnection({ host, port });
+  const socket = net.createConnection({ host, port, timeout: timeoutMs });
   socket.setEncoding("utf8");
   state.tcpSocket = socket;
-  state.tcp = { host, port, status: "connecting", startedAt: new Date().toISOString() };
+  state.tcp = { host, port, timeoutMs, status: "connecting", startedAt: new Date().toISOString() };
   socket.on("connect", () => {
     state.tcp = { ...state.tcp, status: "connected", localPort: socket.localPort };
     broadcast("state", publicState());
@@ -127,15 +131,29 @@ async function handleTcpStart(req, res) {
     state.tcp = { ...state.tcp, status: "error", error: error.message };
     broadcast("state", publicState());
   });
+  socket.on("timeout", () => {
+    socket.destroy(new Error(`TCP connection timed out after ${timeoutMs} ms`));
+  });
   socket.on("close", () => {
-    state.tcp = null;
+    if (state.tcp?.status === "connected") {
+      state.tcp = { ...state.tcp, status: "closed", closedAt: new Date().toISOString() };
+    }
     state.tcpSocket = null;
     state.buffers.tcp = "";
     broadcast("state", publicState());
   });
 
   broadcast("state", publicState());
-  sendJson(res, publicState());
+  try {
+    await waitForTcpConnect(socket);
+    sendJson(res, publicState());
+  } catch (error) {
+    state.tcp = { host, port, timeoutMs, status: "error", error: error.message, startedAt: state.tcp?.startedAt };
+    state.tcpSocket = null;
+    broadcast("error", { source: "tcp", message: error.message });
+    broadcast("state", publicState());
+    sendJson(res, publicState(), 502);
+  }
 }
 
 function handleTcpStop(res) {
@@ -313,6 +331,14 @@ function run(command, args) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForTcpConnect(socket) {
+  if (socket.readyState === "open") return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    socket.once("connect", resolve);
+    socket.once("error", reject);
+  });
 }
 
 async function listPorts() {

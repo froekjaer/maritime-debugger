@@ -101,13 +101,19 @@ async function stopSerial() {
 }
 
 async function startTcp() {
-  await fetchJson("/api/tcp/start", {
-    method: "POST",
-    body: JSON.stringify({
-      host: tcpHostInput.value,
-      port: Number(tcpPortInput.value || 10110)
-    })
-  });
+  try {
+    await fetchJson("/api/tcp/start", {
+      method: "POST",
+      body: JSON.stringify({
+        host: tcpHostInput.value,
+        port: Number(tcpPortInput.value || 10110)
+      })
+    });
+  } catch (error) {
+    tcpStatus.textContent = `TCP error: ${error.message}`;
+    inputStatus.textContent = `Fejl: ${error.message}`;
+    inputStatus.classList.remove("online");
+  }
 }
 
 async function stopTcp() {
@@ -138,14 +144,12 @@ async function runReplay() {
 function renderState(state) {
   const activeInputs = [
     state.serial ? "Serial" : null,
-    state.tcp ? "TCP" : null,
-    state.udp ? "UDP" : null
+    isActiveTcp(state.tcp) ? "TCP" : null,
+    isActiveUdp(state.udp) ? "UDP" : null
   ].filter(Boolean);
   inputStatus.textContent = activeInputs.length ? activeInputs.join(" + ") : "Offline";
   inputStatus.classList.toggle("online", activeInputs.length > 0);
-  tcpStatus.textContent = state.tcp
-    ? `TCP ${state.tcp.status}: ${state.tcp.host}:${state.tcp.port}`
-    : "TCP offline";
+  tcpStatus.textContent = formatTcpStatus(state.tcp);
   udpStatus.textContent = state.udp
     ? `UDP ${state.udp.status}: ${state.udp.host}:${state.udp.port}`
     : "UDP offline";
@@ -159,6 +163,22 @@ function renderState(state) {
     ["Raw", counters.raw || 0],
     ["Warnings", counters.warnings || 0]
   ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join("");
+}
+
+function isActiveTcp(tcp) {
+  return tcp && (tcp.status === "connecting" || tcp.status === "connected");
+}
+
+function isActiveUdp(udp) {
+  return udp && (udp.status === "binding" || udp.status === "listening");
+}
+
+function formatTcpStatus(tcp) {
+  if (!tcp) return "TCP offline";
+  const target = `${tcp.host}:${tcp.port}`;
+  if (tcp.status === "error") return `TCP error: ${target} - ${tcp.error || "connection failed"}`;
+  if (tcp.status === "closed") return `TCP closed: ${target}`;
+  return `TCP ${tcp.status}: ${target}`;
 }
 
 function renderRows() {
@@ -266,7 +286,11 @@ async function fetchJson(url, options = {}) {
     ...options
   });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Request failed");
+  if (!response.ok) {
+    const error = new Error(data.error || data.tcp?.error || "Request failed");
+    error.data = data;
+    throw error;
+  }
   return data;
 }
 
